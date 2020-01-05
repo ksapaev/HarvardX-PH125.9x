@@ -1,0 +1,322 @@
+---
+title: 'HarvardX: PH125.9x Data Science'
+author: "Khushnud Sapaev"
+date: "January 5, 2019"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+---
+
+# TITLE
+CLASSIFICATION ANALYSIS OF WATER PUMPS FUNCTIONALITY IN TANZANIA
+
+
+## INTRODUCTION
+
+Water is a basic necessity and right for all humans, but not all populations in the world have access to clean and potable water. Quality of water delivered and used in households has an essential influence on hygiene and public health (Howard et al., 2003). Effective and sustainable management of water resources is a fundamental factor for guaranteeing sustainable development (Dungumaro & Madulu, 2003). Water is a public resource fundamental to life and in nurturing the environment and plays a dominant position in the social and economic development of the country (maji.go.tz). Tanzanian government started actively becoming involved in the construction of rural and urban water supplies in the 1950s to grant the nation access to drinkable water. The government's share for water development projects covered 75% of the capital cost, the remaining 25% was contributed by the local authorities (Maganga et al., 2002). 
+Major freshwater sources in Tanzania include lakes, rivers, streams, dams, and groundwater (maji.go.tz).  However, they are not well distributed all over the republic. Several areas are deficient in both surface and groundwater sources. The sustainability of the population and environment in Tanzania depends mainly on proper water resources management. In the 1980s Tanzania adopted a River Basin Management Approach for water resource management by dividing the country into nine basins. In 1991 the first National Water Policy was launched to expand the changes in the water segment (Sokile & Koppen, 2005). In 1995 Tanzania's water resources policies and institutions were reviewed by the Government of Tanzania, World Bank, and DANIDA (Sokile & Koppen, 2005). Tanzania's National Water Policy is separated into the following legislation: the Water Resources Development Act, the Rural Water Supply Act, and the Urban Water Supply Act (Sokile & Koppen, 2005). 
+
+
+## OBJECTIVE
+
+The mission of Tanzanian Ministry of Water is to ensure the protection of water sources for Tanzanians and community involvement for sustainable development and management of water resources (maji.go.tz). Availability of adequate water supply of good quality reduces time spent in fetching water, increases health standards, and reduces the prevalence of water-borne diseases such as diarrhea and cholera.
+Modeling the functionality of waterpoint pumps based on environmental and geographic locations would be helpful to target the quality of water and the installment of different types of pumps, and to systematically supply the population with drinkable water. Therefore, the purpose of this study is to explore the relationship between the functionality of installed pumps and installation, management, quality, quantity, as well as geographic, seasonal, and other factors in terms of data mining algorithms.
+Software R is used to predict the pump operation functionality via classification algorithms. Support Vector Machines (SVMs), K-Nearest Neighbors (kNN), Gradient Boosting Machines, Extreme Gradient Boosting, and Random Forest classification algorithms are chosen to classify the functional status.
+
+\pagebreak
+
+## DATA DESCRIPTION
+
+The data for the study is provided by the Tanzanian Ministry of Water and available at "DrivenData.org" under the data science competitions section. The datasets include training, the label of the pump functionality status, and test datasets of installed water pumps in Tanzania. Each water pump has a unique identification number and labeled as one of the following functionality positions: "functional", "functional but needs repair", and "non-functional". Training dataset and label dataset have 59,400 observations of 40 and 2 variables respectively. Test dataset consists of 14,850 observations of 40 variables. Out of the 40 features in the datasets, 31 are categorical variables, 7 are numerical variables, and 2 are date variables. Training dataset and label dataset have the common column: the ID of the pump. Data is collected from geographical locations, waterpoint type, source of water, water quantity, water quality, extraction of water, basin type, construction year, water pump installation, and pump operation details. Both training and test datasets have "zero valued" observations that represent missing values. The purpose of the study is to predict the status of water pumps in the test dataset based on the model used in training data.
+
+
+## DATA PREPARATION
+
+a) Combining training dataset and label dataset: Both datasets have the identical ID attribute, therefore datasets were combined by ID of the water pump.
+b) Removing duplicate or unnecessary columns: First, variables with similar content were checked to keep one of the variables from the group. Second, variables were checked for missing data to remove columns with a large number of missing observations. A total of 22 columns were removed from training dataset including ID variable to prevent the over-fitting problem.
+c) Recoding variable "installer": The table of most frequently appearing installers showed that "government" and "central community" appear in different formats, also some installers consist of three letters or more. I decided to lower all letters and trim to three strings; then I kept the 25 most frequent installers and the rest of the installers labeled as others.
+d) Replacing zero valued "construction_year" values to median values based on installer: For each installer, the zero-construction year was replaced with the median. 
+e) Categorizing "lga" column into three categories: "rural," "urban," and "other".
+f) Creating the season variable: I extracted months from "date_recorded" variable and grouped months by seasons in Tanzania.
+g) Creating the age of the pump subtracting "construction_year" from the maximum "date_recorded" year.
+h) Renaming blank factor level of scheme management variable as "None" to match factor levels of both training and test datasets.
+	A popular way to procedure data for classifiers is to split the training dataset into two sets, a training set, and a test set. The classification model will be built on the training set and applied to the test set. The test set is unseen by the model, so the resulting performance will be a decent prediction to what will be seen when the model is applied to unseen data. For this project, the dataset was randomly split at 0.7 and 0.3 ratio: training set - 41,581 observations of 19 variables;
+test set - 17,819 observations of 19 variables.
+
+
+```{r, echo = FALSE, include = FALSE}
+#Loading libraries
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(maps)) install.packages("maps", repos = "http://cran.us.r-project.org")
+if(!require(class)) install.packages("class", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(e1071)) install.packages("e1071", repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+if(!require(gbm)) install.packages("gbm", repos = "http://cran.us.r-project.org")
+if(!require(naivebayes)) install.packages("naivebayes", repos = "http://cran.us.r-project.org")
+if(!require(kernlab)) install.packages("kernlab", repos = "http://cran.us.r-project.org")
+if(!require(xgboost)) install.packages("xgboost", repos = "http://cran.us.r-project.org")
+###################### DATASETS ####################
+#Loading datasets
+traindata = read.csv('https://s3.amazonaws.com/drivendata/data/7/public/4910797b-ee55-40a7-8668-10efd5c1b960.csv')
+traindata_labels = read.csv('https://s3.amazonaws.com/drivendata/data/7/public/0bf8bc6e-30d0-4c50-956a-603fc693d966.csv')
+#Combining train dataset and labels
+traindata = left_join(traindata, traindata_labels, by = "id")
+traindata <- traindata %>% select(status_group, everything())
+rm(traindata_labels)
+
+#Summary of datasets
+str(traindata)
+summary(traindata)
+```
+
+
+```{r echo = FALSE, include = FALSE}
+################### DATA CLEANSING ######################
+#Checking duplicate or grouped columns
+traindata %>% group_by(quality_group, water_quality) %>% summarise(total = n())
+traindata %>% group_by(waterpoint_type_group, waterpoint_type) %>% summarise(total = n())
+traindata %>% group_by(extraction_type_class, extraction_type_group, extraction_type) %>% tally()
+traindata %>% group_by(quantity_group, quantity) %>% tally()
+traindata %>% group_by(source_class, source_type, source) %>% tally()
+traindata %>% group_by(payment, payment_type) %>% tally()
+traindata %>% group_by(management, management_group) %>% tally()
+traindata %>% group_by(scheme_management) %>% tally()
+traindata %>% group_by(permit) %>% tally()
+traindata %>% group_by(public_meeting) %>% tally()
+traindata %>% group_by(region, region_code, district_code) %>% tally()
+traindata %>% group_by(num_private) %>% tally()
+
+#Removing duplicate or nonrelevant columns
+drops <- c("id", "amount_tsh", "funder", "wpt_name", "num_private", "subvillage", 
+           "region_code", "district_code", "ward", "public_meeting", "recorded_by", "scheme_name",
+           "permit","extraction_type" ,"extraction_type_class", "management", "payment", "quality_group", "quantity_group", "source_type", "source_class", "waterpoint_type_group")
+traindata = traindata[ , !(names(traindata) %in% drops)]
+rm(drops)
+#Renaming blank factor level of scheme management as "None"
+levels(traindata$scheme_management)[1] = "None"
+#Checked installers, most frequent installer has three letters, government occurs in different formats
+head(sort(table(traindata$installer), decreasing = T), 25)
+# Make installer lowercase, take first 3 letters as a sub string
+traindata$installer <- substr(tolower(traindata$installer),1,3)
+traindata$installer[traindata$installer %in% c(" ", "", "0", "_", "-")] <- "other"
+# Take the top 25 substrings from above by occurance frequency
+install_top_25 <- names(summary(as.factor(traindata$installer)))[1:25]
+traindata$installer[!(traindata$installer %in% install_top_25)] <- "other"
+traindata$installer <- as.factor(traindata$installer)
+rm(install_top_25)
+#Replacing zero construction year with medians of years according to installer
+median.years <- tapply(traindata$construction_year[traindata$construction_year>0], traindata$installer[traindata$construction_year>0], median)
+for (i in 1:length(levels(traindata$installer))){
+  traindata$construction_year[traindata$installer==levels(traindata$installer)[i]] = ifelse(traindata$construction_year[traindata$installer==levels(traindata$installer)[i]]==0, median.years[i],traindata$construction_year[traindata$installer==levels(traindata$installer)[i]])
+  }
+rm(median.years)
+rm(i)
+#Creating three categories from lga column
+traindata = traindata %>% mutate(lga = ifelse(grepl("Rural", lga), "rural",
+                                       ifelse(grepl(" Urban", lga), "urban","other")))
+traindata$lga = as.factor(traindata$lga)
+#Converting date recorded variable as date
+traindata$date_recorded = lubridate::ymd(traindata$date_recorded)
+#Creating an age variable by subtracting construction year from the max year value recorded date
+traindata$pump_age = max(lubridate::year(traindata$date_recorded)) - traindata$construction_year
+traindata$construction_year <- NULL
+#Creating a month variable from date recorded
+traindata$month = lubridate::month(traindata$date_recorded, label = TRUE, abbr = FALSE)
+#Dropping date recorded
+traindata$date_recorded = NULL
+#Tanzania has five seasons.Creating Seasons from month
+traindata$season = ifelse(traindata$month %in% c("December", "January", "February"), "hot dry",
+                          ifelse(traindata$month == "March", "intermittent rain",
+                                  ifelse(traindata$month %in% c("April", "May"), "heavy rain",
+                                         ifelse(traindata$month == "November", "short rain",
+                                                "cooler dry"))))
+traindata$season = as.factor(traindata$season)
+#Dropping month variable
+traindata$month <- NULL
+```
+
+\pagebreak
+
+## DATA VISUALIZATION
+
+Data visualizations were made to provide insightful details of the observations, including distribution of the pumps across Tanzania.
+
+```{r water_pumps, echo = FALSE, fig.height=6, fig.width=8}
+##################### VISUALIZATION ###################
+# Creating scatter plot: latitude vs longitude with color as status_group on the map of pumps in Tanzania
+ggplot() +geom_polygon(data=map_data("world", region = "Tanzania"), aes(x=long, y=lat, group=group), colour="black", fill="white") +
+  geom_point(data=subset(traindata, latitude < 0 & longitude > 0), 
+             aes(x=longitude, y=latitude, color = status_group), size = 1)  +
+  geom_point(shape = 1, alpha=0.5) + theme(legend.position = "bottom") +
+  ggtitle("Map of Tanzania with pump locations")
+```
+
+```{r quantity_waterpoint, echo = FALSE, fig.height=5, fig.width=8}
+#Creating scatter plot: quantity vs waterpoint type with color as status_group
+ggplot(traindata, aes(quantity, waterpoint_type, col = status_group)) + geom_point() +
+  geom_jitter(alpha=0.5) + theme(legend.position = "bottom") +
+  ggtitle("Status of pumps in Tanzania by water quantity and waterpoint type")
+```
+
+```{r age_season, echo = FALSE, fig.height=5, fig.width=8}
+#Creating scatter plot: newly generated variables pump age vs record season with color as status_group
+ggplot(traindata, aes(pump_age, season, col = status_group)) + geom_point() +
+  geom_jitter(alpha=0.4) + theme(legend.position = "bottom") + scale_x_continuous(breaks = c(seq(0,max(traindata$pump_age),5))) +
+  ggtitle("Distribution of pumps in Tanzania by age and season")
+```
+
+
+```{r tables, echo = FALSE, include = FALSE}
+#Table formats of pump description by status
+table(traindata$season, traindata$status_group)
+table(traindata$lga, traindata$status_group)
+table(traindata$pump_age, traindata$status_group)
+table(traindata$waterpoint_type, traindata$status_group)
+table(traindata$water_quality, traindata$status_group)
+table(traindata$extraction_type_group, traindata$status_group)
+```
+
+
+
+```{r echo = FALSE}
+################# DATA SPLITTING #######################
+set.seed(99)
+split = createDataPartition(traindata$status_group, p=0.7, list=FALSE)
+training_set = traindata[split, ] #67% data for training 
+test_set = traindata[-split, ] #33% testing
+rm(split)
+```
+
+
+
+```{r }
+################# DATA CLASSIFICATION ##################
+#3-fold CV model selection
+trControl = trainControl(method = "cv", number = 3, savePredictions = TRUE, search="grid")
+#Grid parameters for XGBoost
+parametersGrid = expand.grid(eta = 0.1, colsample_bytree = c(0.6, 0.7, 0.8), 
+                             max_depth = c(5,10), nrounds = 100, gamma = 1, min_child_weight = 2,
+                             subsample=c(0.5, 0.75, 1))
+
+#Classification Models
+svmTrain = train(status_group ~ ., data=training_set,method="svmLinear", trControl=trControl)
+#svmTrain$bestTune
+gbmTrain = train(status_group ~ ., data=training_set,method="gbm", trControl=trControl, verbose=FALSE)
+#gbmTrain$bestTune
+knnTrain = train(status_group ~ ., data=training_set,method="knn", preProcess = c("center","scale"), trControl=trControl)
+#knnTrain$bestTune
+ksvmTrain = train(status_group ~ ., data=training_set,method="svmRadial", trControl=trControl)
+#ksvmTrain$bestTune
+rfTrain = train(status_group ~ ., data=training_set,method="rf", trControl=trControl, importance = TRUE, verbose=FALSE)
+#rfTrain$bestTune
+xgboostTrain = train(status_group ~ ., data=training_set,method="xgbTree", trControl=trControl, tuneGrid=parametersGrid)
+#xgboostTrain$bestTune
+```
+
+
+## CLASSIFICATION RESULTS
+
+SVM Linear. Support Vector Machine uses a kernel technique to transform the data and then based on these transformations it finds an optimal boundary between the possible outputs. 
+```{r }
+#SVM
+y_pred_svm <- predict(svmTrain, test_set)
+varImp(svmTrain)
+#Confusion matrix
+cm = confusionMatrix(y_pred_svm, test_set$status_group)
+cm$byClass[,5:7]
+knitr::kable()
+```
+
+Stochastic GB. Gradient boosting constructs additive regression models by sequentially fitting a simple parameterized function (base learner) to current "pseudo"-residuals by least squares at each iteration.
+```{r }
+#StochasticGB
+y_pred_gbm <- predict(gbmTrain, test_set)
+#Confusion matrix
+cm = confusionMatrix(y_pred_gbm, test_set$status_group)
+cm$byClass[,5:7]
+knitr::kable()
+```
+
+K-NN. K-Nearest Neighbors is robust to noisy training data and is effective in case of large number of training examples. 
+```{r }
+#KNN
+y_pred_knn <- predict(knnTrain, test_set)
+varImp(knnTrain)
+#Confusion matrix
+cm = confusionMatrix(y_pred_knn, test_set$status_group)
+cm$byClass[,5:7]
+knitr::kable()
+```
+
+SVM Radial. Support Vector Machine with Radial kernel is used when the problem is not linearly separable and performs better prediction results in highly dimensional space. 
+```{r }
+#KSVM
+y_pred_ksvm <- predict(ksvmTrain, test_set)
+varImp(ksvmTrain)
+#Confusion matrix
+cm = confusionMatrix(y_pred_ksvm, test_set$status_group)
+cm$byClass[,5:7]
+knitr::kable()
+```
+
+Random Forest. Random Forest algorithm can handle high dimensional spaces as well as large number of training examples. 
+```{r }
+#RF
+y_pred_rf <- predict(rfTrain, test_set)
+varImp(rfTrain)
+#Confusion matrix
+cm = confusionMatrix(y_pred_rf, test_set$status_group)
+cm$byClass[,5:7]
+knitr::kable()
+```
+
+XGBoost. Extreme Gradient Boosting is an implementation of gradient boosted decision trees designed for speed and performance.
+```{r }
+#XGBoost
+xgboostTrain$finalModel
+y_pred_xgb = predict(xgboostTrain, test_set)
+varImp(xgboostTrain)
+#Confusion Matrix
+cm = confusionMatrix(y_pred_xgb, test_set$status_group)
+cm$byClass[,5:7]
+knitr::kable()
+```
+
+\pagebreak
+
+## MODEL EVALUATION
+
+Cross-validation is used to evaluate the model performance in the train set. For each model, the number of cross-validation folders is fixed to three. All models are qualified in the prediction of pump status. Besides the model evaluation and prediction, the confusion matrix is also an important tool to explore deeper information. Results show that linear separation does not detect the pump status "functional but needs repair". Linear models used in the project, such as SVM Linear could not predict the aforementioned pump status.
+Geographic locations, pump age, waterpoint type, water quantity, population, payment type, and water extraction type were the main predictors of pump status
+
+After considering the Accuracy score, F-1 score, Precision and Recall values for the sampled test set, Random Forest and Extreme Gradient Boosting Classifiers are performing well.
+
+```{r echo= FALSE}
+#Compare training models using resamples
+results =resamples(list(StochasticGB=gbmTrain,kNN=knnTrain,SVM=svmTrain,
+                        KernelSVM=ksvmTrain,RandomForest=rfTrain,XGBoost=xgboostTrain))
+                    
+#summary(results)
+bwplot(results)
+```
+
+
+## CONCLUSION
+
+The impact of each variable for pump status varies by classification model. R's Caret package returned the same variable importance for kNN and both SVM Linear and Kernel models. It is important to note that linear models couldn't separate water pumps labeled as "functional but needs repair." Feature importance of the models shows that available water quantity, age of the pump, height of the land, payment for water, water extraction type, waterpoint type, and region of the water pump are going to influence the functional status of the pumps more than the other predictors.
+Predicting the pumps which are "functional but needs repair," decreases the overall cost for the Tanzanian Ministry of Water. Accurate prediction can improve the maintenance processes of the water pumps and verify that fresh, drinkable water is available to communities across Tanzania.  Distinguishing pump status, especially between "non-functional" and "functional but needs repair" could help the Tanzanian water industry reduce expenses. Maintaining the pump would cost significantly cheaper than installing a new pump. Moreover, the classification model is useful in the installation of a water pump at a specific location.
+
+
+## REFERENCES
+
+   Dungumaro, E. W., & Madulu, N. F. (2003). Public participation in integrated water resources management: the case of Tanzania. Physics and Chemistry of the Earth, Parts A/B/C, 28(20-27), 1009-1014.
+   Howard, G., Bartram, J., Water, S., & World Health Organization. (2003). Domestic water quantity, service level, and health.
+   Maganga, F. P., Butterworth, J. A., & Moriarty, P. (2002). Domestic water supply, competition for water resources and IWRM in Tanzania: a review and discussion paper. Physics and Chemistry of the Earth, Parts A/B/C, 27(11-22), 919-926.
+   Official website of the Ministry of Water of The United Republic of Tanzania (maji.go.tz), retrieved from http://maji.go.tz/pages/mission-statement
+   Sokile, S & Koppen, Barbara. (2005). Integrated Water Resource Management in Tanzania: Interface between Formal and Informal Institutions.
